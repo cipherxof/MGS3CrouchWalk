@@ -65,7 +65,7 @@ struct MovementWork
     uint32_t field80;
     uint32_t field84;
     uint32_t field88;
-    uint32_t padForceLimit;
+    uint16_t padForceLimit;
 };
 
 typedef uintptr_t* __fastcall InitializeCamoIndexDelegate(int* a1, int a2);

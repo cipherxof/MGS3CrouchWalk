@@ -48,13 +48,11 @@ int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64
     // we store this here so we don't have to hardcode another address that
     // needs to be updated with each new game patch
     plWorkGlobal = plWork;
+
+    // process the default squatting logic while ignoring the button hold state check
     IgnoreButtonHold = true;
-
     int* result = ActionSquatStill(work, plWork, a3, a4);
-    int16_t padForce = *(int16_t*)(work + 2016);
-
     IgnoreButtonHold = false;
-    CrouchMoving = padForce > plWork->padForceLimit;
 
     // detect holding X while crouched to go into prone
     if (!PlayerStatusCheck(0xE0u))
@@ -67,8 +65,11 @@ int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64
             plWork->flag |= MovementFlag::FlagSquatToGround;
     }
 
-    // 0xDE seems to make sure we aren't in first person mode
-    if (CrouchMoving && !PlayerStatusCheck(0xDE))
+    // check that the pad is being held down
+    int16_t padForce = *(int16_t*)(work + 2016);
+    CrouchMoving = padForce > plWork->padForceLimit;
+
+    if (CrouchMoving && !PlayerStatusCheck(0xDE)) // 0xDE seems to make sure we aren't in first person mode 
     {
         if (!CrouchWalkEnabled)
             plWork->motion = PlayerSetMotion(work, PlayerMotion::RunUpwards); // we must set the motion to something unusable on the first run, otherwise the anim won't reset properly
@@ -94,8 +95,11 @@ void __fastcall SetMotionDataHook(int* m_ctrl, int layer, PlayerMotion motion, i
 
 __int64 __fastcall ActMovementHook(MovementWork* plWork, __int64 work, int flag)
 {
-    if (plWorkGlobal != NULL && plWorkGlobal->action != ActSquatStillOffset)
+    if (plWorkGlobal != NULL && plWorkGlobal->action != ActSquatStillOffset) 
+    {
         CrouchWalkEnabled = false;
+        CrouchMoving = false;
+    }
 
     return ActMovement(plWork, work, flag);
 }
