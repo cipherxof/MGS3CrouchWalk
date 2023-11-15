@@ -75,3 +75,4 @@ typedef uint32_t  __fastcall PlayerSetMotionDelegate(__int64 work, PlayerMotion 
 typedef void __fastcall SetMotionDataDelegate(int* m_ctrl, int layer, int motion, int time, __int64 a5);
 typedef __int64 __fastcall PlayerStatusCheckDelegate(unsigned int a1);
 typedef __int64 __fastcall ActMovementDelegate(MovementWork* plWork, __int64 work, int flag);
+typedef __int64 __fastcall GetButtonHoldingStateDelegate(__int64 work, MovementWork* plWork);

@@ -13,6 +13,7 @@ float CamoIndexModifier = 1.0f;
 int CamoIndexValue = 0;
 bool CrouchWalkEnabled = false;
 bool CrouchMoving = false;
+bool IgnoreButtonHold = false;
 mINI::INIStructure Config;
 
 InitializeCamoIndexDelegate* InitializeCamoIndex;
@@ -22,17 +23,24 @@ PlayerSetMotionDelegate* PlayerSetMotionInternal;
 SetMotionDataDelegate* SetMotionData;
 PlayerStatusCheckDelegate* PlayerStatusCheck;
 ActMovementDelegate* ActMovement;
+GetButtonHoldingStateDelegate* GetButtonHoldingState;
 
 uintptr_t PlayerSetMotion(__int64 work, PlayerMotion motion)
 {
     int motionIndex = (int)motion;
 
     if (motionIndex > 0)
-    {
         motionIndex--;
-    }
 
     return PlayerSetMotionInternal(work, (PlayerMotion)motionIndex);
+}
+
+__int64 __fastcall GetButtonHoldingStateHook(__int64 work, MovementWork* plWork)
+{
+    if (IgnoreButtonHold)
+        return 0;
+
+    return GetButtonHoldingState(work, plWork);
 }
 
 int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64 a3, __int64 a4)
@@ -40,11 +48,24 @@ int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64
     // we store this here so we don't have to hardcode another address that
     // needs to be updated with each new game patch
     plWorkGlobal = plWork;
+    IgnoreButtonHold = true;
 
     int* result = ActionSquatStill(work, plWork, a3, a4);
     int16_t padForce = *(int16_t*)(work + 2016);
 
+    IgnoreButtonHold = false;
     CrouchMoving = padForce > plWork->padForceLimit;
+
+    // detect holding X while crouched to go into prone
+    if (!PlayerStatusCheck(0xE0u))
+    {
+        auto buttonState = GetButtonHoldingState(work, plWork);
+
+        if (buttonState == 1)
+            plWork->flag |= MovementFlag::FlagStand;
+        else if (buttonState == 2)
+            plWork->flag |= MovementFlag::FlagSquatToGround;
+    }
 
     // 0xDE seems to make sure we aren't in first person mode
     if (CrouchMoving && !PlayerStatusCheck(0xDE))
@@ -63,7 +84,7 @@ int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64
     return result;
 }
 
-void  __fastcall SetMotionDataHook(int* m_ctrl, int layer, PlayerMotion motion, int time, __int64 a5)
+void __fastcall SetMotionDataHook(int* m_ctrl, int layer, PlayerMotion motion, int time, __int64 a5)
 {
     if (motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
         motion = PlayerMotion::SquatMove;
@@ -71,7 +92,7 @@ void  __fastcall SetMotionDataHook(int* m_ctrl, int layer, PlayerMotion motion, 
     SetMotionData(m_ctrl, layer, motion, time, a5);
 }
 
-__int64  __fastcall ActMovementHook(MovementWork* plWork, __int64 work, int flag)
+__int64 __fastcall ActMovementHook(MovementWork* plWork, __int64 work, int flag)
 {
     if (plWorkGlobal != NULL && plWorkGlobal->action != ActSquatStillOffset)
         CrouchWalkEnabled = false;
@@ -106,13 +127,15 @@ int* __fastcall CalculateCamoIndexHook(int* a1, int a2)
 
     return result;
 }
+
 void InstallHooks()
 {
     int status = MH_Initialize();
 
-    uintptr_t actMovementOffset         = (uintptr_t)Memory::PatternScan(GameModule, "40 53 56 57 48 81 EC F0 00 00 00 48 8B 05 96 ?? ?? 00 48 33 C4 48 89 84 24 B0 00 00 00 48 8B F9");
+    uintptr_t actMovementOffset         = (uintptr_t)Memory::PatternScan(GameModule, "40 53 56 57 48 81 EC F0 00 00 00 48 8B 05 ?? ?? ?? 00 48 33 C4 48 89 84 24 B0 00 00 00 48 8B F9");
     uintptr_t setMotionDataOffset       = (uintptr_t)Memory::PatternScan(GameModule, "48 85 C9 0F 84 42 03 00 00 4C 8B DC 55 53 56 41");
-    uintptr_t calcuateCamoIndexOffset = (uintptr_t)Memory::PatternScan(GameModule, "48 83 EC 30 0F 29 74 24 20 48 8B F9 48 63 F2 E8") - 0x10;
+    uintptr_t calcuateCamoIndexOffset   = (uintptr_t)Memory::PatternScan(GameModule, "48 83 EC 30 0F 29 74 24 20 48 8B F9 48 63 F2 E8") - 0x10;
+    uintptr_t getBtnHoldStateOffset     = (uintptr_t)Memory::PatternScan(GameModule, "44 0F B7 8A 8E 00 00 00 4C 8B C2 66 45 85 C9 78");
     uint8_t* disableCrouchProneOffset   = Memory::PatternScan(GameModule, "00 00 7E 19 83 4F 68 10");
 
     ActSquatStillOffset     = (uintptr_t)Memory::PatternScan(GameModule, "4C 8B DC 55 57 41 56 49 8D 6B A1 48 81 EC 00 01");
@@ -123,6 +146,7 @@ void InstallHooks()
     Memory::DetourFunction(actMovementOffset, (LPVOID)ActMovementHook, (LPVOID*)&ActMovement);
     Memory::DetourFunction(setMotionDataOffset, (LPVOID)SetMotionDataHook, (LPVOID*)&SetMotionData);
     Memory::DetourFunction(calcuateCamoIndexOffset, (LPVOID)CalculateCamoIndexHook, (LPVOID*)&CalculateCamoIndex);
+    Memory::DetourFunction(getBtnHoldStateOffset, (LPVOID)GetButtonHoldingStateHook, (LPVOID*)&GetButtonHoldingState);
     Memory::DetourFunction(ActSquatStillOffset, (LPVOID)ActionSquatStillHook, (LPVOID*)&ActionSquatStill);
 
     CamoIndexData = InitializeCamoIndex(0, 0);
@@ -156,10 +180,7 @@ DWORD WINAPI MainThread(LPVOID lpParam)
     return true;
 }
 
-BOOL APIENTRY DllMain(HMODULE hModule,
-    DWORD  ul_reason_for_call,
-    LPVOID lpReserved
-)
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
     switch (ul_reason_for_call)
     {
