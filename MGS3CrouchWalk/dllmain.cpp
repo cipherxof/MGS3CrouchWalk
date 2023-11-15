@@ -2,38 +2,102 @@
 #include "Memory.h"
 #include "MinHook.h"
 #include "ini.h"
+#include "types.h"
 
 HMODULE GameModule = GetModuleHandleA("METAL GEAR SOLID3.exe");
 uintptr_t GameBase = (uintptr_t)GameModule;
 uintptr_t* CamoIndexData = NULL;
+uintptr_t ActSquatStillOffset = 0;
+MovementWork* plWorkGlobal = NULL;
 float CamoIndexModifier = 1.0f;
 int CamoIndexValue = 0;
+bool CrouchWalkEnabled = false;
+bool CrouchMoving = false;
 mINI::INIStructure Config;
 
-typedef uintptr_t* __fastcall InitializeCamoIndexDelegate(uintptr_t a1, int a2);
 InitializeCamoIndexDelegate* InitializeCamoIndex;
-
-typedef uintptr_t __fastcall CalculateCamoIndexDelegate(uintptr_t a1, int a2);
 CalculateCamoIndexDelegate* CalculateCamoIndex;
-uintptr_t __fastcall CalculateCamoIndexHook(uintptr_t a1, int a2)
-{
-    uintptr_t result = CalculateCamoIndex(a1, a2);
+ActionSquatStillDelegate* ActionSquatStill;
+PlayerSetMotionDelegate* PlayerSetMotionInternal;
+SetMotionDataDelegate* SetMotionData;
+PlayerStatusCheckDelegate* PlayerStatusCheck;
+ActMovementDelegate* ActMovement;
 
-    if (CamoIndexData != NULL)
+uintptr_t PlayerSetMotion(__int64 work, PlayerMotion motion)
+{
+    int motionIndex = (int)motion;
+
+    if (motionIndex > 0)
+    {
+        motionIndex--;
+    }
+
+    return PlayerSetMotionInternal(work, (PlayerMotion)motionIndex);
+}
+
+int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64 a3, __int64 a4)
+{
+    // we store this here so we don't have to hardcode another address that
+    // needs to be updated with each new game patch
+    plWorkGlobal = plWork;
+
+    int* result = ActionSquatStill(work, plWork, a3, a4);
+    int16_t padForce = *(int16_t*)(work + 2016);
+
+    CrouchMoving = padForce > plWork->padForceLimit;
+
+    // 0xDE seems to make sure we aren't in first person mode
+    if (CrouchMoving && !PlayerStatusCheck(0xDE))
+    {
+        if (!CrouchWalkEnabled)
+            plWork->motion = PlayerSetMotion(work, PlayerMotion::RunUpwards); // we must set the motion to something unusable on the first run, otherwise the anim won't reset properly
+        else
+            plWork->motion = PlayerSetMotion(work, PlayerMotion::StandMoveStalk); // hijack the stalking motion
+
+        CrouchWalkEnabled = true;
+    }
+
+    if (CrouchWalkEnabled && (plWork->flag & MovementFlag::FlagStand) != 0)
+        CrouchWalkEnabled = false;
+
+    return result;
+}
+
+void  __fastcall SetMotionDataHook(int* m_ctrl, int layer, PlayerMotion motion, int time, __int64 a5)
+{
+    if (motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
+        motion = PlayerMotion::SquatMove;
+
+    SetMotionData(m_ctrl, layer, motion, time, a5);
+}
+
+__int64  __fastcall ActMovementHook(MovementWork* plWork, __int64 work, int flag)
+{
+    if (plWorkGlobal != NULL && plWorkGlobal->action != ActSquatStillOffset)
+        CrouchWalkEnabled = false;
+
+    return ActMovement(plWork, work, flag);
+}
+
+int* __fastcall CalculateCamoIndexHook(int* a1, int a2)
+{
+    int* result = CalculateCamoIndex(a1, a2);
+
+    if (CamoIndexData != NULL && CrouchWalkEnabled)
     {
         int index = a2 << 7;
         auto camoIndex = (int*)((char*)&CamoIndexData[4] + index + 4);
         auto movementState = (int*)((char*)&CamoIndexData[4] + index + 8);
 
-        if (*camoIndex >= 1000) // ignore if stealth is equipped
+        if (*camoIndex >= 1000) // ignore if stealth is equipped (todo: properly check item for ezgun and spider camo)
         {
             return result;
         }
 
-        if (*movementState == 0x6002)
+        if (CrouchMoving)
         {
-             *camoIndex = *camoIndex < 0 ? *camoIndex / CamoIndexModifier : *camoIndex * CamoIndexModifier;
-             *camoIndex += CamoIndexValue;
+            *camoIndex = *camoIndex < 0 ? *camoIndex / CamoIndexModifier : *camoIndex * CamoIndexModifier;
+            *camoIndex -= CamoIndexValue;
 
             if (*camoIndex > 950) *camoIndex = 950;
             if (*camoIndex < -1000) *camoIndex = -1000;
@@ -42,18 +106,30 @@ uintptr_t __fastcall CalculateCamoIndexHook(uintptr_t a1, int a2)
 
     return result;
 }
-
-void InstallHooks() 
+void InstallHooks()
 {
     int status = MH_Initialize();
 
+    uintptr_t actMovementOffset         = (uintptr_t)Memory::PatternScan(GameModule, "40 53 56 57 48 81 EC F0 00 00 00 48 8B 05 96 ?? ?? 00 48 33 C4 48 89 84 24 B0 00 00 00 48 8B F9");
+    uintptr_t setMotionDataOffset       = (uintptr_t)Memory::PatternScan(GameModule, "48 85 C9 0F 84 42 03 00 00 4C 8B DC 55 53 56 41");
     uintptr_t calcuateCamoIndexOffset = (uintptr_t)Memory::PatternScan(GameModule, "48 83 EC 30 0F 29 74 24 20 48 8B F9 48 63 F2 E8") - 0x10;
-    uintptr_t initializeCamoIndexOffset = (uintptr_t)Memory::PatternScan(GameModule, "85 D2 75 33 0F 57 C0 48 63 C2 48 C1 E0 07 48 8D");
+    uint8_t* disableCrouchProneOffset   = Memory::PatternScan(GameModule, "00 00 7E 19 83 4F 68 10");
 
+    ActSquatStillOffset     = (uintptr_t)Memory::PatternScan(GameModule, "4C 8B DC 55 57 41 56 49 8D 6B A1 48 81 EC 00 01");
+    InitializeCamoIndex     = (InitializeCamoIndexDelegate*)Memory::PatternScan(GameModule, "85 D2 75 33 0F 57 C0 48 63 C2 48 C1 E0 07 48 8D");
+    PlayerSetMotionInternal = (PlayerSetMotionDelegate*)(Memory::PatternScan(GameModule, "B9 0F 01 00 00 E8 ?? 36 FF FF 85 C0 74 2A BA FF") - 0x10);
+    PlayerStatusCheck       = (PlayerStatusCheckDelegate*)Memory::PatternScan(GameModule, "8B D1 B8 01 00 00 00 83 E1 1F D3 E0 8B CA 48 C1");
+
+    Memory::DetourFunction(actMovementOffset, (LPVOID)ActMovementHook, (LPVOID*)&ActMovement);
+    Memory::DetourFunction(setMotionDataOffset, (LPVOID)SetMotionDataHook, (LPVOID*)&SetMotionData);
     Memory::DetourFunction(calcuateCamoIndexOffset, (LPVOID)CalculateCamoIndexHook, (LPVOID*)&CalculateCamoIndex);
+    Memory::DetourFunction(ActSquatStillOffset, (LPVOID)ActionSquatStillHook, (LPVOID*)&ActionSquatStill);
 
-    InitializeCamoIndex = (InitializeCamoIndexDelegate*)initializeCamoIndexOffset;
     CamoIndexData = InitializeCamoIndex(0, 0);
+
+    DWORD oldProtect;
+    VirtualProtect((LPVOID)disableCrouchProneOffset, 8, PAGE_EXECUTE_READWRITE, &oldProtect);
+    disableCrouchProneOffset[7] = 0x00;
 }
 
 void ReadConfig()
@@ -71,20 +147,19 @@ DWORD WINAPI MainThread(LPVOID lpParam)
     WCHAR* filename = PathFindFileName(exePath);
 
     if (wcsncmp(filename, L"launcher.exe", 13) == 0)
-    {
         return true;
-    }
 
     Sleep(3000); // delay, just in case
     ReadConfig();
     InstallHooks();
+
     return true;
 }
 
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-                     )
+BOOL APIENTRY DllMain(HMODULE hModule,
+    DWORD  ul_reason_for_call,
+    LPVOID lpReserved
+)
 {
     switch (ul_reason_for_call)
     {

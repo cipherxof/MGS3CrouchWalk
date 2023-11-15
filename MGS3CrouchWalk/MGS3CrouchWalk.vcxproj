@@ -155,6 +155,7 @@
     <ClInclude Include="ini.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="MinHook.h" />
+    <ClInclude Include="types.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
