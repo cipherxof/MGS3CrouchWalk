@@ -118,7 +118,7 @@ int* __fastcall CalculateCamoIndexHook(int* a1, int a2)
         if (CrouchMoving)
         {
             *camoIndex = *camoIndex < 0 ? *camoIndex / CamoIndexModifier : *camoIndex * CamoIndexModifier;
-            *camoIndex -= CamoIndexValue;
+            *camoIndex += CamoIndexValue;
 
             if (*camoIndex > 950) *camoIndex = 950;
             if (*camoIndex < -1000) *camoIndex = -1000;
