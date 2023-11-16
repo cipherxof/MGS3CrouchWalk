@@ -13,6 +13,8 @@ MotionControl* mCtrlGlobal = NULL;
 mINI::INIStructure Config;
 
 float CamoIndexModifier = 1.0f;
+float CrouchWalkSpeed = 6.0f;
+float CrouchStalkSpeed = 3.0f;
 int CamoIndexValue = 0;
 bool CrouchWalkEnabled = false;
 bool CrouchMoving = false;
@@ -77,7 +79,7 @@ int* __fastcall CalculateCamoIndexHook(int* a1, int a2)
 {
     int* result = CalculateCamoIndex(a1, a2);
 
-    if (CamoIndexData == NULL || CrouchWalkEnabled || !CrouchMoving)
+    if (CamoIndexData == NULL || !CrouchWalkEnabled || !CrouchMoving)
         return result;
 
     int index = a2 << 7;
@@ -130,7 +132,7 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
             plWork->motion = PlayerSetMotion(work, PlayerMotion::StandMoveStalk); // hijack the stalking motion
 
         if (mCtrlGlobal != NULL)
-            mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? 3.0 : 6.0;
+            mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? CrouchStalkSpeed : CrouchWalkSpeed;
 
         CrouchWalkEnabled = true;
     }
@@ -175,6 +177,8 @@ void ReadConfig()
     file.read(Config);
     CamoIndexModifier = std::stof(Config["Settings"]["CamoIndexModifier"]);
     CamoIndexValue = std::stoi(Config["Settings"]["CamoIndexValue"]) * 10;
+    CrouchWalkSpeed = std::stof(Config["Settings"]["CrouchWalkSpeed"]);
+    CrouchStalkSpeed = std::stof(Config["Settings"]["CrouchStalkSpeed"]);
 }
 
 DWORD WINAPI MainThread(LPVOID lpParam)
