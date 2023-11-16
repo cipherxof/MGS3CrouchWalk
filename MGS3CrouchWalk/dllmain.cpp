@@ -9,12 +9,15 @@ uintptr_t GameBase = (uintptr_t)GameModule;
 uintptr_t* CamoIndexData = NULL;
 uintptr_t ActSquatStillOffset = 0;
 MovementWork* plWorkGlobal = NULL;
+MotionControl* mCtrlGlobal = NULL;
+mINI::INIStructure Config;
+
 float CamoIndexModifier = 1.0f;
 int CamoIndexValue = 0;
 bool CrouchWalkEnabled = false;
 bool CrouchMoving = false;
+bool CrouchMovingSlow = false;
 bool IgnoreButtonHold = false;
-mINI::INIStructure Config;
 
 InitializeCamoIndexDelegate* InitializeCamoIndex;
 CalculateCamoIndexDelegate* CalculateCamoIndex;
@@ -25,7 +28,7 @@ PlayerStatusCheckDelegate* PlayerStatusCheck;
 ActMovementDelegate* ActMovement;
 GetButtonHoldingStateDelegate* GetButtonHoldingState;
 
-uintptr_t PlayerSetMotion(__int64 work, PlayerMotion motion)
+uintptr_t PlayerSetMotion(int64_t work, PlayerMotion motion)
 {
     int motionIndex = (int)motion;
 
@@ -35,7 +38,7 @@ uintptr_t PlayerSetMotion(__int64 work, PlayerMotion motion)
     return PlayerSetMotionInternal(work, (PlayerMotion)motionIndex);
 }
 
-__int64 __fastcall GetButtonHoldingStateHook(__int64 work, MovementWork* plWork)
+int64_t __fastcall GetButtonHoldingStateHook(int64_t work, MovementWork* plWork)
 {
     if (IgnoreButtonHold)
         return 0;
@@ -43,7 +46,7 @@ __int64 __fastcall GetButtonHoldingStateHook(__int64 work, MovementWork* plWork)
     return GetButtonHoldingState(work, plWork);
 }
 
-int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64 a3, __int64 a4)
+int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t a3, int64_t a4)
 {
     // we store this here so we don't have to hardcode another address that
     // needs to be updated with each new game patch
@@ -68,6 +71,7 @@ int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64
     // check that the pad is being held down
     int16_t padForce = *(int16_t*)(work + 2016);
     CrouchMoving = padForce > plWork->padForceLimit;
+    CrouchMovingSlow = padForce < 180;
 
     if (CrouchMoving && !PlayerStatusCheck(0xDE)) // 0xDE seems to make sure we aren't in first person mode 
     {
@@ -75,6 +79,9 @@ int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64
             plWork->motion = PlayerSetMotion(work, PlayerMotion::RunUpwards); // we must set the motion to something unusable on the first run, otherwise the anim won't reset properly
         else
             plWork->motion = PlayerSetMotion(work, PlayerMotion::StandMoveStalk); // hijack the stalking motion
+
+        if (mCtrlGlobal != NULL)
+            mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? 3.0 : 6.0;
 
         CrouchWalkEnabled = true;
     }
@@ -85,15 +92,23 @@ int* __fastcall ActionSquatStillHook(__int64 work, MovementWork* plWork, __int64
     return result;
 }
 
-void __fastcall SetMotionDataHook(int* m_ctrl, int layer, PlayerMotion motion, int time, __int64 a5)
+void __fastcall SetMotionDataHook(MotionControl* motionControl, int layer, PlayerMotion motion, int time, int64_t mask)
 {
-    if (motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
-        motion = PlayerMotion::SquatMove;
+    if (motionControl->mtcmControl->mtarName == 0x6891CC)
+        mCtrlGlobal = motionControl;
 
-    SetMotionData(m_ctrl, layer, motion, time, a5);
+    if (motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
+    {
+        float* currentTime = (float*)((uintptr_t)motionControl + 0x128);
+
+        time = (int)*currentTime;
+        motion = PlayerMotion::SquatMove;
+    }
+
+    SetMotionData(motionControl, layer, motion, time, mask);
 }
 
-__int64 __fastcall ActMovementHook(MovementWork* plWork, __int64 work, int flag)
+int64_t __fastcall ActMovementHook(MovementWork* plWork, int64_t work, int flag)
 {
     if (plWorkGlobal != NULL && plWorkGlobal->action != ActSquatStillOffset) 
     {

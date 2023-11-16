@@ -17,7 +17,8 @@ const enum PlayerMotion
     RollingToGround = 23,
     StandCover = 97,
     SquatCover = 98,
-    SquatMove = 199
+    SquatMove = 199,
+    SquatMoveSlow = 200
 };
 
 const enum MovementFlag
@@ -68,11 +69,40 @@ struct MovementWork
     uint16_t padForceLimit;
 };
 
+struct MtcmControl
+{
+    int motion;
+    int flag;
+    void* mtarHeader; 
+    void* mtcmHeader; 
+    uintptr_t* data;
+    int loop;
+    int lastCheckTime;
+    uint32_t field24;
+    uint32_t field28;
+    uint32_t field2C;
+    uint32_t field30;
+    uint32_t field34;
+    uint32_t field38;
+    float field3C;
+    float field40;
+    float field44;
+    float motionTimeBase;
+    uint32_t field4C;
+    uint32_t mtarName;
+};
+
+struct MotionControl
+{
+    void* mtar;
+    MtcmControl* mtcmControl;
+};
+
 typedef uintptr_t* __fastcall InitializeCamoIndexDelegate(int* a1, int a2);
 typedef int* __fastcall CalculateCamoIndexDelegate(int* a1, int a2);
-typedef int* __fastcall ActionSquatStillDelegate(__int64 work, MovementWork* plWork, __int64 a3, __int64 a4);
-typedef uint32_t  __fastcall PlayerSetMotionDelegate(__int64 work, PlayerMotion motion);
-typedef void __fastcall SetMotionDataDelegate(int* m_ctrl, int layer, int motion, int time, __int64 a5);
-typedef __int64 __fastcall PlayerStatusCheckDelegate(unsigned int a1);
-typedef __int64 __fastcall ActMovementDelegate(MovementWork* plWork, __int64 work, int flag);
-typedef __int64 __fastcall GetButtonHoldingStateDelegate(__int64 work, MovementWork* plWork);
+typedef int* __fastcall ActionSquatStillDelegate(int64_t work, MovementWork* plWork, int64_t a3, int64_t a4);
+typedef uint32_t  __fastcall PlayerSetMotionDelegate(int64_t work, PlayerMotion motion);
+typedef void __fastcall SetMotionDataDelegate(MotionControl* motionControl, int layer, int motion, int time, int64_t mask);
+typedef int64_t __fastcall PlayerStatusCheckDelegate(unsigned int a1);
+typedef int64_t __fastcall ActMovementDelegate(MovementWork* plWork, int64_t work, int flag);
+typedef int64_t __fastcall GetButtonHoldingStateDelegate(int64_t work, MovementWork* plWork);
