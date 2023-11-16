@@ -38,12 +38,61 @@ uintptr_t PlayerSetMotion(int64_t work, PlayerMotion motion)
     return PlayerSetMotionInternal(work, (PlayerMotion)motionIndex);
 }
 
+int64_t __fastcall ActMovementHook(MovementWork* plWork, int64_t work, int flag)
+{
+    if (plWorkGlobal != NULL && plWorkGlobal->action != ActSquatStillOffset)
+    {
+        CrouchWalkEnabled = false;
+        CrouchMoving = false;
+    }
+
+    return ActMovement(plWork, work, flag);
+}
+
+void __fastcall SetMotionDataHook(MotionControl* motionControl, int layer, PlayerMotion motion, int time, int64_t mask)
+{
+    if (motionControl->mtcmControl->mtarName == 0x6891CC)
+        mCtrlGlobal = motionControl;
+
+    if (motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
+    {
+        float* currentTime = (float*)((uintptr_t)motionControl + 0x128);
+
+        time = (int)*currentTime;
+        motion = PlayerMotion::SquatMove;
+    }
+
+    SetMotionData(motionControl, layer, motion, time, mask);
+}
+
 int64_t __fastcall GetButtonHoldingStateHook(int64_t work, MovementWork* plWork)
 {
     if (IgnoreButtonHold)
         return 0;
 
     return GetButtonHoldingState(work, plWork);
+}
+
+int* __fastcall CalculateCamoIndexHook(int* a1, int a2)
+{
+    int* result = CalculateCamoIndex(a1, a2);
+
+    if (CamoIndexData == NULL || CrouchWalkEnabled || !CrouchMoving)
+        return result;
+
+    int index = a2 << 7;
+    auto camoIndex = (int*)((char*)&CamoIndexData[4] + index + 4);
+
+    if (*camoIndex >= 1000) // ignore if stealth is equipped (todo: properly check item for ezgun and spider camo)
+        return result;
+
+    *camoIndex = *camoIndex < 0 ? *camoIndex / CamoIndexModifier : *camoIndex * CamoIndexModifier;
+    *camoIndex += CamoIndexValue;
+
+    if (*camoIndex > 950) *camoIndex = 950;
+    if (*camoIndex < -1000) *camoIndex = -1000;
+
+    return result;
 }
 
 int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t a3, int64_t a4)
@@ -88,61 +137,6 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
 
     if (CrouchWalkEnabled && (plWork->flag & MovementFlag::FlagStand) != 0)
         CrouchWalkEnabled = false;
-
-    return result;
-}
-
-void __fastcall SetMotionDataHook(MotionControl* motionControl, int layer, PlayerMotion motion, int time, int64_t mask)
-{
-    if (motionControl->mtcmControl->mtarName == 0x6891CC)
-        mCtrlGlobal = motionControl;
-
-    if (motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
-    {
-        float* currentTime = (float*)((uintptr_t)motionControl + 0x128);
-
-        time = (int)*currentTime;
-        motion = PlayerMotion::SquatMove;
-    }
-
-    SetMotionData(motionControl, layer, motion, time, mask);
-}
-
-int64_t __fastcall ActMovementHook(MovementWork* plWork, int64_t work, int flag)
-{
-    if (plWorkGlobal != NULL && plWorkGlobal->action != ActSquatStillOffset) 
-    {
-        CrouchWalkEnabled = false;
-        CrouchMoving = false;
-    }
-
-    return ActMovement(plWork, work, flag);
-}
-
-int* __fastcall CalculateCamoIndexHook(int* a1, int a2)
-{
-    int* result = CalculateCamoIndex(a1, a2);
-
-    if (CamoIndexData != NULL && CrouchWalkEnabled)
-    {
-        int index = a2 << 7;
-        auto camoIndex = (int*)((char*)&CamoIndexData[4] + index + 4);
-        auto movementState = (int*)((char*)&CamoIndexData[4] + index + 8);
-
-        if (*camoIndex >= 1000) // ignore if stealth is equipped (todo: properly check item for ezgun and spider camo)
-        {
-            return result;
-        }
-
-        if (CrouchMoving)
-        {
-            *camoIndex = *camoIndex < 0 ? *camoIndex / CamoIndexModifier : *camoIndex * CamoIndexModifier;
-            *camoIndex += CamoIndexValue;
-
-            if (*camoIndex > 950) *camoIndex = 950;
-            if (*camoIndex < -1000) *camoIndex = -1000;
-        }
-    }
 
     return result;
 }
