@@ -106,3 +106,4 @@ typedef void __fastcall SetMotionDataDelegate(MotionControl* motionControl, int 
 typedef int64_t __fastcall PlayerStatusCheckDelegate(unsigned int a1);
 typedef int64_t __fastcall ActMovementDelegate(MovementWork* plWork, int64_t work, int flag);
 typedef int64_t __fastcall GetButtonHoldingStateDelegate(int64_t work, MovementWork* plWork);
+typedef int64_t __fastcall PlayerStatusSetDelegate(int a1, int64_t a2, int64_t a3, int64_t a4);

@@ -28,6 +28,7 @@ ActionSquatStillDelegate* ActionSquatStill;
 PlayerSetMotionDelegate* PlayerSetMotionInternal;
 SetMotionDataDelegate* SetMotionData;
 PlayerStatusCheckDelegate* PlayerStatusCheck;
+PlayerStatusSetDelegate* PlayerStatusSet;
 ActMovementDelegate* ActMovement;
 GetButtonHoldingStateDelegate* GetButtonHoldingState;
 
@@ -133,15 +134,17 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
         {
             mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? CrouchStalkSpeed : CrouchWalkSpeed;
 
-            auto mtsq_cntrl = *((uintptr_t*)(uintptr_t)mCtrlGlobal + 15);
+            auto mtsq_cntrl = *((uintptr_t*)mCtrlGlobal + 15);
             auto sound = (uint8_t*)mtsq_cntrl + 0x3C;
             auto soundType = (uint8_t*)mtsq_cntrl + 0x48;
-            auto soundLevel = (uint8_t*)mtsq_cntrl + 0x40;
+            auto motionId = (uint8_t*)mtsq_cntrl + 0x40;
 
             *sound = 5;
-            *soundType = CrouchMovingSlow ? 0x20 : 0x40;
-            *soundLevel = CrouchMovingSlow ? 12 : 150;
+            *soundType = CrouchMovingSlow ? 0x40 : 0x60;
+            *motionId = CrouchMovingSlow ? PlayerMotion::StandMoveStalk : PlayerMotion::StandMoveSlow;
         }
+
+        PlayerStatusSet(11, 14, 0x10C, 0xFFFFFFFF); // enables grass movement sounds
 
         CrouchWalkEnabled = true;
     }
@@ -166,6 +169,7 @@ void InstallHooks()
     InitializeCamoIndex     = (InitializeCamoIndexDelegate*)Memory::PatternScan(GameModule, "85 D2 75 33 0F 57 C0 48 63 C2 48 C1 E0 07 48 8D");
     PlayerSetMotionInternal = (PlayerSetMotionDelegate*)(Memory::PatternScan(GameModule, "B9 0F 01 00 00 E8 ?? 36 FF FF 85 C0 74 2A BA FF") - 0x10);
     PlayerStatusCheck       = (PlayerStatusCheckDelegate*)Memory::PatternScan(GameModule, "8B D1 B8 01 00 00 00 83 E1 1F D3 E0 8B CA 48 C1");
+    PlayerStatusSet         = (PlayerStatusSetDelegate*)(Memory::PatternScan(GameModule, "04 89 0F AB D0 41 89 04") - 0x46);
 
     Memory::DetourFunction(actMovementOffset, (LPVOID)ActMovementHook, (LPVOID*)&ActMovement);
     Memory::DetourFunction(setMotionDataOffset, (LPVOID)SetMotionDataHook, (LPVOID*)&SetMotionData);
