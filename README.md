@@ -6,17 +6,11 @@ A plugin that aims to bring crouch walking to Metal Gear Solid 3: Master Collect
 ![crouchwalknew](https://github.com/cipherxof/MGS3CrouchWalk/assets/5994581/527a3dc0-a487-4e0b-ac2f-99729e53dcf5)
 
 ## Features
+- Both slow and fast crouch walking are implemented.
+    - NPCs are only alerted while fast crouch walking in close proximity.
 - Crouching affects your visibility to enemies (i.e, you can hide behind cover)
-- Camo index is adjusted while crouching
-- Does not replace any existing animations or functionality
-
-## TODO
-- [ ] Implement CQC crouching animations
-- [ ] Support for MGS4 and Peace Walker crouching animations
-
-## Known Issues
-- You cannot initiate CQC while crouched
-- Sometimes you cannot hug a wall while crouched (stand up to fix it)
+- The camo index is dynamically adjusted while crouch walking.
+- Seamlessly integrated into the game engine as a genuine feature, without displacing any existing functionality.
   
 ## Credits
 - Zoft for mtar research and porting the 3DS animations over to the Master Collection
