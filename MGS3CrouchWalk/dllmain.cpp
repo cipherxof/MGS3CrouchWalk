@@ -11,15 +11,16 @@ uintptr_t ActSquatStillOffset = 0;
 MovementWork* plWorkGlobal = NULL;
 MotionControl* mCtrlGlobal = NULL;
 mINI::INIStructure Config;
-
-float CamoIndexModifier = 1.0f;
-float CrouchWalkSpeed = 6.0f;
-float CrouchStalkSpeed = 3.0f;
-int CamoIndexValue = 0;
 bool CrouchWalkEnabled = false;
 bool CrouchMoving = false;
 bool CrouchMovingSlow = false;
 bool IgnoreButtonHold = false;
+
+// config values
+float CamoIndexModifier = 1.0f;
+float CrouchWalkSpeed = 6.0f;
+float CrouchStalkSpeed = 3.0f;
+int CamoIndexValue = 0;
 
 InitializeCamoIndexDelegate* InitializeCamoIndex;
 CalculateCamoIndexDelegate* CalculateCamoIndex;
@@ -56,7 +57,7 @@ void __fastcall SetMotionDataHook(MotionControl* motionControl, int layer, Playe
     if (motionControl->mtcmControl->mtarName == 0x6891CC)
         mCtrlGlobal = motionControl;
 
-    if (motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
+    if (motionControl == mCtrlGlobal && motion == PlayerMotion::StandMoveStalk && CrouchWalkEnabled)
     {
         float* currentTime = (float*)((uintptr_t)motionControl + 0x128);
 
@@ -126,13 +127,21 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
 
     if (CrouchMoving && !PlayerStatusCheck(0xDE)) // 0xDE seems to make sure we aren't in first person mode 
     {
-        if (!CrouchWalkEnabled)
-            plWork->motion = PlayerSetMotion(work, PlayerMotion::RunUpwards); // we must set the motion to something unusable on the first run, otherwise the anim won't reset properly
-        else
-            plWork->motion = PlayerSetMotion(work, PlayerMotion::StandMoveStalk); // hijack the stalking motion
+        plWork->motion = PlayerSetMotion(work, CrouchWalkEnabled ? PlayerMotion::StandMoveStalk : PlayerMotion::RunUpwards);
 
         if (mCtrlGlobal != NULL)
+        {
             mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? CrouchStalkSpeed : CrouchWalkSpeed;
+
+            auto mtsq_cntrl = *((uintptr_t*)(uintptr_t)mCtrlGlobal + 15);
+            auto sound = (uint8_t*)mtsq_cntrl + 0x3C;
+            auto soundType = (uint8_t*)mtsq_cntrl + 0x48;
+            auto soundLevel = (uint8_t*)mtsq_cntrl + 0x40;
+
+            *sound = 5;
+            *soundType = CrouchMovingSlow ? 0x20 : 0x40;
+            *soundLevel = CrouchMovingSlow ? 12 : 150;
+        }
 
         CrouchWalkEnabled = true;
     }
