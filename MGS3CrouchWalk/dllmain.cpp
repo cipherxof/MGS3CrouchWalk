@@ -15,6 +15,7 @@ bool CrouchWalkEnabled = false;
 bool CrouchMoving = false;
 bool CrouchMovingSlow = false;
 bool IgnoreButtonHold = false;
+bool HijackSequence = false;
 
 // config values
 float CamoIndexModifier = 1.0f;
@@ -31,6 +32,7 @@ PlayerStatusCheckDelegate* PlayerStatusCheck;
 PlayerStatusSetDelegate* PlayerStatusSet;
 ActMovementDelegate* ActMovement;
 GetButtonHoldingStateDelegate* GetButtonHoldingState;
+MotionPlaySequenceDelegate* MotionPlaySequence;
 
 uintptr_t PlayerSetMotion(int64_t work, PlayerMotion motion)
 {
@@ -64,9 +66,12 @@ void __fastcall SetMotionDataHook(MotionControl* motionControl, int layer, Playe
 
         time = (int)*currentTime;
         motion = PlayerMotion::SquatMove;
+
+        HijackSequence = true;
     }
 
     SetMotionData(motionControl, layer, motion, time, mask);
+    HijackSequence = false;
 }
 
 int64_t __fastcall GetButtonHoldingStateHook(int64_t work, MovementWork* plWork)
@@ -75,6 +80,14 @@ int64_t __fastcall GetButtonHoldingStateHook(int64_t work, MovementWork* plWork)
         return 0;
 
     return GetButtonHoldingState(work, plWork);
+}
+
+int64_t __fastcall MotionPlaySequenceHook(__int64 mtsq_ctrl, int layer, int num, int flag, int loop_time)
+{
+    if (HijackSequence)
+        num = CrouchMovingSlow ? PlayerMotion::StandMoveSlow : PlayerMotion::StandMoveStalk;
+
+    return MotionPlaySequence(mtsq_ctrl, layer, num, flag, loop_time);
 }
 
 int* __fastcall CalculateCamoIndexHook(int* a1, int a2)
@@ -123,6 +136,8 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
 
     // check that the pad is being held down
     int16_t padForce = *(int16_t*)(work + 2016);
+    bool wasMoving = CrouchMoving;
+    bool wasSlow = CrouchMovingSlow;
     CrouchMoving = padForce > plWork->padForceLimit;
     CrouchMovingSlow = padForce < 180;
 
@@ -134,14 +149,12 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
         {
             mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? CrouchStalkSpeed : CrouchWalkSpeed;
 
-            auto mtsq_cntrl = *((uintptr_t*)mCtrlGlobal + 15);
-            auto sound = (uint8_t*)mtsq_cntrl + 0x3C;
-            auto soundType = (uint8_t*)mtsq_cntrl + 0x48;
-            auto motionId = (uint8_t*)mtsq_cntrl + 0x40;
+            auto mtsqCntrl = *((uintptr_t*)mCtrlGlobal + 15);
 
-            *sound = 5;
-            *soundType = CrouchMovingSlow ? 0x40 : 0x60;
-            *motionId = CrouchMovingSlow ? PlayerMotion::StandMoveStalk : PlayerMotion::StandMoveSlow;
+            if (wasMoving && wasSlow != CrouchMovingSlow)
+            {
+                MotionPlaySequence(mtsqCntrl, 0, CrouchMovingSlow ? PlayerMotion::StandMoveSlow : PlayerMotion::StandMoveStalk, 5, 0x1b0);
+            }
         }
 
         PlayerStatusSet(11, 14, 0x10C, 0xFFFFFFFF); // enables grass movement sounds
@@ -163,6 +176,7 @@ void InstallHooks()
     uintptr_t setMotionDataOffset       = (uintptr_t)Memory::PatternScan(GameModule, "48 85 C9 0F 84 42 03 00 00 4C 8B DC 55 53 56 41");
     uintptr_t calcuateCamoIndexOffset   = (uintptr_t)Memory::PatternScan(GameModule, "48 83 EC 30 0F 29 74 24 20 48 8B F9 48 63 F2 E8") - 0x10;
     uintptr_t getBtnHoldStateOffset     = (uintptr_t)Memory::PatternScan(GameModule, "44 0F B7 8A 8E 00 00 00 4C 8B C2 66 45 85 C9 78");
+    uintptr_t motionPlaySeqOffset       = (uintptr_t)Memory::PatternScan(GameModule, "4D 63 D8 48 85 C9 74 6B  48 63 C2 48 8D 14 40 48");
     uint8_t* disableCrouchProneOffset   = Memory::PatternScan(GameModule, "00 00 7E 19 83 4F 68 10");
 
     ActSquatStillOffset     = (uintptr_t)Memory::PatternScan(GameModule, "4C 8B DC 55 57 41 56 49 8D 6B A1 48 81 EC 00 01");
@@ -175,6 +189,7 @@ void InstallHooks()
     Memory::DetourFunction(setMotionDataOffset, (LPVOID)SetMotionDataHook, (LPVOID*)&SetMotionData);
     Memory::DetourFunction(calcuateCamoIndexOffset, (LPVOID)CalculateCamoIndexHook, (LPVOID*)&CalculateCamoIndex);
     Memory::DetourFunction(getBtnHoldStateOffset, (LPVOID)GetButtonHoldingStateHook, (LPVOID*)&GetButtonHoldingState);
+    Memory::DetourFunction(motionPlaySeqOffset, (LPVOID)MotionPlaySequenceHook, (LPVOID*)&MotionPlaySequence);
     Memory::DetourFunction(ActSquatStillOffset, (LPVOID)ActionSquatStillHook, (LPVOID*)&ActionSquatStill);
 
     CamoIndexData = InitializeCamoIndex(0, 0);
