@@ -12,5 +12,12 @@ A plugin that aims to bring crouch walking to Metal Gear Solid 3: Master Collect
 - The camo index is dynamically adjusted while crouch walking.
 - Seamlessly integrated into the game engine as a genuine feature, without displacing any existing functionality.
   
+## Installation
+- Extract the contents of the release zip into the game folder.<br />(e.g. "**steamapps\common\MGS3**").
+
+### Steam Deck/Linux Additional Instructions
+🚩**You do not need to do this if you are using Windows!**
+- Open up the game properties of MGS3 in Steam and add `WINEDLLOVERRIDES="wininet,winhttp=n,b" %command%` to the launch options.
+
 ## Credits
 - Zoft for mtar research and porting the 3DS animations over to the Master Collection
