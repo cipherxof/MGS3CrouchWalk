@@ -16,6 +16,7 @@ bool CrouchMoving = false;
 bool CrouchMovingSlow = false;
 bool IgnoreButtonHold = false;
 bool HijackSequence = false;
+double* actorWaitValue = nullptr;
 
 // config values
 float CamoIndexModifier = 1.0f;
@@ -147,7 +148,14 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
 
         if (mCtrlGlobal != NULL)
         {
-            mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? CrouchStalkSpeed : CrouchWalkSpeed;
+            if (actorWaitValue != nullptr) 
+            {
+                mCtrlGlobal->mtcmControl->motionTimeBase = (CrouchMovingSlow ? CrouchStalkSpeed : CrouchWalkSpeed) * (*actorWaitValue / (1.0 / 60));
+            }
+            else 
+            {
+                mCtrlGlobal->mtcmControl->motionTimeBase = CrouchMovingSlow ? CrouchStalkSpeed : CrouchWalkSpeed;
+            }
 
             auto mtsqCntrl = *((uintptr_t*)mCtrlGlobal + 15);
 
@@ -168,6 +176,11 @@ int* __fastcall ActionSquatStillHook(int64_t work, MovementWork* plWork, int64_t
     return result;
 }
 
+uintptr_t GetRelativeOffset(uint8_t* addr)
+{
+    return reinterpret_cast<uintptr_t>(addr) + 4 + *reinterpret_cast<int32_t*>(addr);
+}
+
 void InstallHooks()
 {
     int status = MH_Initialize();
@@ -178,6 +191,12 @@ void InstallHooks()
     uintptr_t getBtnHoldStateOffset     = (uintptr_t)Memory::PatternScan(GameModule, "44 0F B7 8A 8E 00 00 00 4C 8B C2 66 45 85 C9 78");
     uintptr_t motionPlaySeqOffset       = (uintptr_t)Memory::PatternScan(GameModule, "4D 63 D8 48 85 C9 74 6B  48 63 C2 48 8D 14 40 48");
     uint8_t* disableCrouchProneOffset   = Memory::PatternScan(GameModule, "00 00 7E 19 83 4F 68 10");
+    uint8_t* actorWaitValueOffset       = Memory::PatternScan(GameModule, "83 3D ?? ?? ?? ?? 00 ?? ?? F2 0F 10 0D");
+    if(actorWaitValueOffset != nullptr)
+    {
+        actorWaitValue = reinterpret_cast<double*>(GetRelativeOffset(actorWaitValueOffset + 13));
+    }
+
 
     ActSquatStillOffset     = (uintptr_t)Memory::PatternScan(GameModule, "4C 8B DC 55 57 41 56 49 8D 6B A1 48 81 EC 00 01");
     InitializeCamoIndex     = (InitializeCamoIndexDelegate*)Memory::PatternScan(GameModule, "85 D2 75 33 0F 57 C0 48 63 C2 48 C1 E0 07 48 8D");
