@@ -1,7 +1,7 @@
 # MGS3CrouchWalk
 A plugin that aims to bring crouch walking to Metal Gear Solid 3: Master Collection.
 
-**Download:** [GitHub](https://github.com/cipherxof/MGS3CrouchWalk/releases) | [NexusMods](https://www.nexusmods.com/metalgearsolidmastercollection/mods/118/)
+**Download:** [GitHub](https://github.com/cipherxof/MGS3CrouchWalk/releases) | [NexusMods](https://www.nexusmods.com/metalgearsolid3mc/mods/27)
 
 ![crouchwalknew](https://github.com/cipherxof/MGS3CrouchWalk/assets/5994581/527a3dc0-a487-4e0b-ac2f-99729e53dcf5)
 
